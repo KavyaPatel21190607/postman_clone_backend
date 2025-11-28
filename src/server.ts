@@ -80,6 +80,10 @@ app.get('/', (req, res) => {
 import authRoutes from './routes/authRoutes';
 import dataRoutes from './routes/dataRoutes';
 import proxyRoutes from './routes/proxyRoutes';
+import debugRoutes from './routes/debugRoutes';
+
+// Debug routes - safe to remove after troubleshooting
+app.use('/api/debug', debugRoutes);
 
 app.use('/api/auth', authRoutes);
 app.use('/api/proxy', proxyRoutes);
