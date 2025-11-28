@@ -17,11 +17,24 @@ const allowedOrigins = rawAllowed.split(',').map(s => s.trim()).filter(Boolean);
 
 const corsOptions: cors.CorsOptions = {
     origin: (origin, callback) => {
+        // Debug: log incoming origin for troubleshooting
+        console.log('[CORS] incoming origin:', origin);
+
         // Allow requests with no origin (curl, Postman, server-to-server)
         if (!origin) return callback(null, true);
+
+        // Allow explicitly allowed origins
         if (allowedOrigins.length === 0 || allowedOrigins.indexOf(origin) !== -1) {
             return callback(null, true);
         }
+
+        // In development, allow localhost / 127.0.0.1 with any port
+        const isLocalhost = /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin || '');
+        if (process.env.NODE_ENV === 'development' && isLocalhost) {
+            return callback(null, true);
+        }
+
+        console.warn(`[CORS] blocked origin: ${origin}`);
         return callback(new Error('Not allowed by CORS'));
     },
     optionsSuccessStatus: 200,
