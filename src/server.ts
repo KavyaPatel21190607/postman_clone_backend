@@ -11,7 +11,23 @@ connectDB();
 
 const app = express();
 
-app.use(cors());
+// Configure CORS to allow only origins specified in `CLIENT_URL` or `ALLOWED_ORIGINS` env vars.
+const rawAllowed = process.env.CLIENT_URL || process.env.ALLOWED_ORIGINS || '';
+const allowedOrigins = rawAllowed.split(',').map(s => s.trim()).filter(Boolean);
+
+const corsOptions: cors.CorsOptions = {
+    origin: (origin, callback) => {
+        // Allow requests with no origin (curl, Postman, server-to-server)
+        if (!origin) return callback(null, true);
+        if (allowedOrigins.length === 0 || allowedOrigins.indexOf(origin) !== -1) {
+            return callback(null, true);
+        }
+        return callback(new Error('Not allowed by CORS'));
+    },
+    optionsSuccessStatus: 200,
+};
+
+app.use(cors(corsOptions));
 app.use(helmet());
 app.use(express.json());
 
