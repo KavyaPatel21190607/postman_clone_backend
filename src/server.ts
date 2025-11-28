@@ -15,32 +15,61 @@ const app = express();
 const rawAllowed = process.env.CLIENT_URL || process.env.ALLOWED_ORIGINS || '';
 const allowedOrigins = rawAllowed.split(',').map(s => s.trim()).filter(Boolean);
 
-const corsOptions: cors.CorsOptions = {
-    origin: (origin, callback) => {
-        // Debug: log incoming origin for troubleshooting
-        console.log('[CORS] incoming origin:', origin);
-
-        // Allow requests with no origin (curl, Postman, server-to-server)
-        if (!origin) return callback(null, true);
-
-        // Allow explicitly allowed origins
-        if (allowedOrigins.length === 0 || allowedOrigins.indexOf(origin) !== -1) {
-            return callback(null, true);
+// Helper to match origin against allowedOrigins, supporting leading-dot wildcards like `.example.com`
+function originAllowed(origin: string, list: string[]) {
+    if (!origin) return false;
+    try {
+        const url = new URL(origin);
+        const hostname = url.hostname;
+        // Exact match first
+        if (list.indexOf(origin) !== -1 || list.indexOf(url.origin) !== -1) return true;
+        // Hostname matches: exact or wildcard like `.example.com`
+        for (const allowed of list) {
+            if (!allowed) continue;
+            // allow entries like `https://app.example.com` or `app.example.com` or `.example.com`
+            if (allowed.startsWith('.')) {
+                if (hostname.endsWith(allowed)) return true;
+            } else if (allowed.includes('://')) {
+                const a = new URL(allowed);
+                if (a.hostname === hostname) return true;
+            } else {
+                if (hostname === allowed) return true;
+            }
         }
+    } catch (e) {
+        // invalid origin format
+    }
+    return false;
+}
 
-        // In development, allow localhost / 127.0.0.1 with any port
-        const isLocalhost = /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin || '');
-        if (process.env.NODE_ENV === 'development' && isLocalhost) {
-            return callback(null, true);
-        }
+// If no allowed origins are configured, allow all origins (useful for quick deploys). Otherwise check list.
+let corsOptions: cors.CorsOptions;
+if (allowedOrigins.length === 0) {
+    corsOptions = { origin: true, optionsSuccessStatus: 200 };
+} else {
+    corsOptions = {
+        origin: (origin, callback) => {
+            console.log('[CORS] incoming origin:', origin);
+            // Allow non-browser requests (no origin)
+            if (!origin) return callback(null, true);
 
-        console.warn(`[CORS] blocked origin: ${origin}`);
-        return callback(new Error('Not allowed by CORS'));
-    },
-    optionsSuccessStatus: 200,
-};
+            // Allow if explicitly allowed or matches wildcard/hostname
+            if (originAllowed(origin, allowedOrigins)) return callback(null, true);
 
+            // In development allow localhost/127.0.0.1
+            const isLocalhost = /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin || '');
+            if (process.env.NODE_ENV === 'development' && isLocalhost) return callback(null, true);
+
+            console.warn(`[CORS] blocked origin: ${origin}`);
+            return callback(new Error('Not allowed by CORS'));
+        },
+        optionsSuccessStatus: 200,
+    };
+}
+
+// Apply CORS and also explicitly handle preflight for all routes
 app.use(cors(corsOptions));
+app.options('*', cors(corsOptions));
 app.use(helmet());
 app.use(express.json());
 
